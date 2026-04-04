@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "google-ads": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://www.adsagent.org/api/mcp",
+        "--transport",
+        "http-first",
+        "--header",
+        "Authorization:Bearer ${ADS_AGENT_KEY}"
+      ],
+      "env": {
+        "ADS_AGENT_KEY": "${ADS_AGENT_KEY}"
+      }
+    }
+  }
+}
