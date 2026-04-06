@@ -86,6 +86,8 @@ Pull these simultaneously — they don't require campaign IDs and they tell you 
 
 **After Phase 1A, apply scope filtering:** If the user specified a scope (see Scope Detection above), identify which campaigns match. Log the matched campaigns and their IDs. If no campaigns match, stop and ask the user to clarify. For the rest of the audit, "active campaigns" means scope-matched campaigns (or all campaigns if no scope was specified).
 
+**Also after Phase 1A: kick off the website crawl.** Once `listAds` data is available, resolve the website URL and start the website crawl (Phase 3, Step 2) immediately — don't wait for Phase 1B or Phase 2. The crawl results aren't needed until Phase 3's user questions, so it runs in the background while you finish data collection and scoring.
+
 ### Phase 1B: Adaptive data pull (depends on account size)
 
 Count the **in-scope** enabled campaigns with spend from Phase 1A, then follow the cookbook. When scoped, only pull per-campaign data for in-scope campaigns — but still run account-wide GAQL queries (they're cheap and provide context for scoring):
@@ -359,30 +361,73 @@ Pull as much as possible from the data you already have — only ask the user fo
 | `keyword_landscape.high_intent_terms` | Top-converting keywords |
 | `keyword_landscape.competitive_terms` | Low impression share keywords with high CPC |
 | `keyword_landscape.long_tail_opportunities` | Converting search terms not yet added as keywords |
+| `website` | Ad final URLs (extract root domain from `listAds` data) |
+
+### Website crawl (kicked off after Phase 1A, results used here)
+
+This crawl starts in the background after Phase 1A (see note in Phase 1A). By the time you reach Phase 3, the results should be ready.
+
+**Step 1: Resolve the website URL**
+
+Find the website URL from Phase 1 data, in priority order:
+1. Ad final URLs from `listAds` — extract the root domain (e.g., `https://example.com`). Normalize to the apex domain (strip `www.` and subdomain prefixes) before frequency-counting across all ads. Use the most common domain.
+2. If no URL found in ad data, ask the user: "What's your website URL?"
+
+**Step 2: Crawl the website**
+
+Issue all `WebFetch` calls in a single tool-use turn so they run in parallel. If any individual fetch fails (404, timeout, blocked), skip that page and continue.
+
+| Page | URL pattern | Why |
+|------|-------------|-----|
+| Homepage | `{root_url}` | Services overview, hero messaging, trust signals, brand voice |
+| About page | `{root_url}/about` | Differentiators, history, team, social proof |
+| Services page | `{root_url}/services` | Full service list, service descriptions |
+| Top ad landing pages | Up to 3 unique final URLs from ads, **excluding any URL that matches the homepage, about, or services pages already being fetched** | What the ads actually link to — offers, CTAs, messaging |
+
+**Fallback if `/about` or `/services` return 404:** Try one fallback each:
+- About: try `/about-us` (most common variant)
+- Services: try `/our-services` (most common variant)
+
+If the fallback also 404s, move on — don't spider the site.
+
+**Detecting unusable pages:** If a fetched page has fewer than 50 words of visible text (excluding HTML tags, scripts, and navigation), or if the primary content is a login/auth form (email/password fields, "Sign In" as the main heading), treat it as a failed fetch and skip it for extraction.
+
+**Step 3: Extract business context from crawled pages**
+
+Scan the fetched page content for these signals. Merge with what you already inferred from account data — website data fills gaps, account data confirms what's active.
+
+| Field | What to look for on the website |
+|-------|-------------------------------|
+| `services` | Service names from navigation, headings, service cards. **Merge** with services inferred from campaigns — the website may list services not yet advertised |
+| `differentiators` | "Why choose us" sections, hero subheadings, unique value claims (e.g., "Family-owned since 1998", "Same-day service guaranteed") |
+| `social_proof` | Review counts, star ratings, award badges, "As seen in" logos, certifications, years in business, number of customers served |
+| `offers_or_promotions` | Banner offers, hero CTAs with discounts, seasonal promotions, "Free estimate" or "X% off" |
+| `brand_voice` | Tone of headlines and body copy — professional vs casual, technical vs approachable. Capture 3-5 literal phrases from the site that exemplify the tone |
+| `target_audience` | Who the site speaks to — homeowners vs businesses, specific industries, demographic cues |
+| `locations` | Footer addresses, "Areas we serve" pages, location-specific content |
+| `landing_pages` | Map each ad final URL to a summary of what's on that page (headline, primary CTA, offer if any) |
+| `industry` | What the business clearly does — confirm or refine what campaign names suggest |
+| `competitors` | Look for comparison tables or "vs" pages linked from the nav |
+
+**Important:** Only extract from pages you actually retrieved with usable content. If the homepage is all you got, that's fine — it usually has the most signal. Extract in the site's original language — downstream skills handle translation when generating English ad copy.
+
+**If all pages failed or returned no usable content**, skip website extraction entirely and proceed to the full question set below (do not skip any questions).
 
 ### What to ask the user
 
-Present what you inferred, then ask for what's missing. Frame it conversationally, not as a checklist.
+Present what you inferred from **both** account data and the website crawl, then ask for what's still missing.
 
-**Always ask:**
-- "What makes you different from competitors?" → `differentiators`
+**Always ask** (these are rarely on websites):
+- "What makes you different from competitors?" → `differentiators` (ask even if the website had a "why us" section — the owner's answer is often sharper than marketing copy)
 - "Who are your main competitors?" → `competitors`
 - "Is your business seasonal? When's your busiest time?" → `seasonality`
-- "What's your website URL?" → for landing page context
 
-**Ask if not obvious from data:**
-- Industry (if campaign names don't make it clear)
-- Target audience (if search terms don't reveal it)
-- Current offers or promotions
+**Ask only if not found in account data or website crawl:**
+- Industry
+- Services
+- Target audience
 - Social proof (reviews, awards, years in business)
-
-### Website analysis
-
-If the user provides their website URL (or it's visible in ad final URLs):
-
-- Note the URL in `landing_pages`
-- Look at what the ads link to — do headlines match landing page content?
-- Note any offers, trust signals, or CTAs visible on the site that could inform ad copy
+- Current offers or promotions
 
 ### Save the context
 

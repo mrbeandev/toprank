@@ -34,7 +34,9 @@ Every ad copy decision depends on understanding the business. This skill stores 
 
 ### Intake interview
 
-Gather these fields. Don't ask them as a rigid checklist — pull what you can from context (the account's existing ads, website, campaign names) and only ask what's missing.
+Gather these fields. Don't ask them as a rigid checklist — pull what you can from context (the account's existing ads, campaign names) and only ask what's missing.
+
+**Website crawl before questions:** If you can find the business website URL from ad final URLs (via `listAds`) or the user provides it, issue `WebFetch` calls for the homepage, about page (`/about`, fallback `/about-us`), and services page (`/services`, fallback `/our-services`) in a single tool-use turn. Extract services, differentiators, social proof, offers, brand voice, and locations from the page content. Skip pages that 404 or return fewer than 50 words of visible text. If all pages fail, proceed to the full intake interview.
 
 ```json
 {
