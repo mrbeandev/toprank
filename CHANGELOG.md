@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.9.8.0] — 2026-04-08
+
+### Added
+- **API key verification gate** — The `/ads` skill now checks for `ADSAGENT_API_KEY` in `~/.claude/settings.json` before executing any other step. If the key is missing, it prompts the user to obtain one from [adsagent.org](https://adsagent.org), collects the key interactively, and saves it automatically.
+
+---
+
 ## [0.9.7] — 2026-04-08
 
 ### Changed

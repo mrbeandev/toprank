@@ -2,7 +2,7 @@
 name: ads
 description: Manage Google Ads campaigns — read performance, optimize keywords, adjust bids and budgets, add negatives, pause/enable campaigns, manage ads/ad groups, tracking templates, location targeting, network settings, rename campaigns/ad groups, bulk operations, and undo changes. Use this skill whenever the user mentions Google Ads, campaigns, keywords, ad spend, CPA, ROAS, search terms, negative keywords, bids, budgets, ads performance, location targeting, geo targeting, or campaign settings — even if they don't say "ads" explicitly.
 argument-hint: "<campaign name, keyword, or 'show performance'>"
-version: 2.0.0
+version: 2.0.1
 triggers:
   - google ads
   - campaigns
