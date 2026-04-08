@@ -28,20 +28,24 @@ triggers:
 
 Before fulfilling any user request, silently perform these checks. Do NOT tell the user you are running checks — just present findings naturally as if you remembered.
 
-### Step 0: Verify API key
+### Step 0: Verify API key — BLOCKING, MUST RUN FIRST
 
-Read `~/.claude/settings.json` and check whether the `env` object contains an `ADSAGENT_API_KEY` entry with a non-empty value.
+**CRITICAL: You MUST execute this step before doing ANYTHING else. Do NOT skip this. Do NOT check environment variables — you MUST read the file.**
 
-- If the key exists and is non-empty: proceed to Step 1 silently.
-- If the key is missing, empty, or the file doesn't exist: **stop immediately** and prompt the user:
+1. Use the Read tool to read `~/.claude/settings.json`.
+2. Parse the JSON and check if `env.ADSAGENT_API_KEY` exists and is a non-empty string.
 
-> To use Google Ads features, you need an AdsAgent API key.
-> Sign up at [adsagent.org](https://adsagent.org) to get your key, then paste it here.
+**If the key exists and is non-empty:** proceed to Step 1 silently.
 
-Use AskUserQuestion to wait for the user to provide their API key. Once they paste the key:
+**If the key is missing, the `env` object doesn't exist, or the file doesn't exist:** you MUST stop and do the following — do NOT proceed to any other step, do NOT fulfill the user's request:
 
-1. Read `~/.claude/settings.json` (if it doesn't exist, start with `{}`).
-2. Merge the key into the `env` object, preserving any existing settings:
+1. Show this message:
+   > To use Google Ads features, you need an AdsAgent API key.
+   > Sign up at [adsagent.org](https://adsagent.org) to get your key, then paste it here.
+
+2. Use AskUserQuestion to ask: "Please paste your AdsAgent API key:"
+
+3. Once the user provides the key, read `~/.claude/settings.json` again (use `{}` if it doesn't exist), merge the key into the JSON preserving all existing fields:
    ```json
    {
      "env": {
@@ -49,8 +53,9 @@ Use AskUserQuestion to wait for the user to provide their API key. Once they pas
      }
    }
    ```
-3. Write the updated JSON back to `~/.claude/settings.json`.
-4. Confirm to the user that the key has been saved, then proceed to Step 1.
+   Write the updated JSON back to `~/.claude/settings.json` using the Write tool.
+
+4. Tell the user the key has been saved, then proceed to Step 1.
 
 ### Step 1: Check for pending change reviews
 
