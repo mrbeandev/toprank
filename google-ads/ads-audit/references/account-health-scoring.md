@@ -214,15 +214,110 @@ Always report: "Overall CPA is $X, but brand CPA is $Y and non-brand CPA is $Z."
 
 ---
 
-## Pulse Metrics — What to Track
+## Pulse Metrics — The Only Scoreboard
 
-Instead of a composite score, the audit tracks 3 objective metrics:
+No letter grades. No emoji verdicts. No rating buckets. The audit surfaces **3 pulse metrics**, each annotated with its biggest contributor and a pointer to the pass that fixes it. The metric IS the verdict — read it as dollars and act on it directly.
 
-| Metric | What it measures | Better = | Severity thresholds |
-|--------|-----------------|----------|---------------------|
-| **Waste rate** | % of spend on zero-conversion entities | Lower | >20% critical, 10-20% needs work, 5-10% OK, <5% healthy |
-| **Demand captured** | Weighted avg IS on profitable campaigns | Higher | <30% critical, 30-50% needs work, 50-70% OK, >70% strong |
-| **CPA** | Cost per conversion | Lower/stable | Compare to industry benchmarks below |
+Every pulse metric must answer three questions inline:
+1. **What's the number?** (raw value)
+2. **What's driving it?** (the single biggest contributor, named)
+3. **Where do I fix it?** (pointer to Pass 1/2/3)
+
+### The three metrics
+
+| Metric | What it measures | Better = | How to compute |
+|---|---|---|---|
+| **Waste** | $/mo burning on zero-conversion spend | Lower | `Wasted Spend Calculation` section below, extrapolated to 30 days |
+| **Demand captured** | % of eligible impressions won on profitable campaigns | Higher | Weighted avg `search_impression_share` across campaigns with ≥1 conversion, weighted by spend. If `unit_economics` exists, use `CPA ≤ Break-Even CPA` as the profitability filter instead |
+| **CPA** | Cost per conversion | Lower or stable | `total spend / total conversions` — compare to industry benchmarks below or to `unit_economics.break_even_cpa` if available |
+
+### Annotation rules (what each metric line must include)
+
+**Waste line:**
+- Dollar value extrapolated to 30 days: `$X/mo (Y% of spend)`
+- Top single contributor: keyword / search term / campaign name + its dollar impact
+- Pointer: `→ Pass 1`
+- **Signal failure override:** If conversion tracking is broken (no conversion actions, or 0 conversions with 50+ clicks), replace the dollar figure with `⚠️ Cannot compute — conversion tracking broken` and point to the tracking fix. Waste is meaningless when you can't measure conversions.
+
+**Demand captured line:**
+- Percentage: `X%`
+- Top single opportunity: campaign name + headroom in $/mo (margin-aware where possible)
+- Pointer: `→ Pass 2`
+- **Relevance override:** If rank-lost IS > 30% on any campaign, name that campaign and flag that more budget won't help — "fix relevance first" — and point to Pass 3 instead.
+
+**CPA line:**
+- Dollar value: `$X`
+- Context: either "vs industry $Y–$Z" (from `industry-templates.json`) or "vs break-even $Y" (from `unit_economics`)
+- Top single structural driver (if CPA is unhealthy): which campaign is pulling it up, or which QS component is below average
+- Pointer: `→ Pass 3` (structural fixes) or "healthy — no action" if CPA is stable and within benchmark
+
+### Quick Wins section (auto-generated, dollar-driven)
+
+After the 3-pass report, emit a `## Quick Wins` section containing every finding where:
+
+```
+dollar_impact_usd >= 200 AND time_to_fix IN ('<5min', '<15min')
+```
+
+Plus any **signal/tracking/policy fix** regardless of dollar value — these qualify unconditionally because they unblock measurement.
+
+Sort by dollar impact descending (signal fixes pinned to the top). Max 5 items. If none qualify, omit the section entirely — don't fabricate.
+
+Every Quick Win must be executable via a single `/ads` command where applicable and include the command text. Examples:
+- `Add 7 negatives to Tukwila Search — saves ~$340/mo (<5 min) · /ads add negatives to Tukwila Search: jobs, careers, salary, diy, free, reddit, training`
+- `Enable Enhanced Conversions — unblocks measurement (<15 min) · Configure in Google Ads UI (not /ads)`
+
+### `time_to_fix` field (kept — descriptive, not a rating)
+
+Every finding carries one descriptive field: `time_to_fix` ∈ `<5min | <15min | <30min | <2h | >2h`. This is how long the fix takes, not how important it is. It's used only as a filter input for Quick Wins. There is no severity tag, no priority label, no letter — the dollar figure on each finding carries all the priority information the user needs. Sort and filter on dollars.
+
+### What goes in `audit-history.json`
+
+Persist the pulse metrics with their top contributors. No verdict, no grade, no severity counts.
+
+```json
+{
+  "date": "2026-04-14",
+  "date_range": "2026-03-15 to 2026-04-14",
+  "account_id": "7521406707",
+  "mode": "full",
+  "total_spend": 14320.00,
+  "total_conversions": 72,
+  "metrics": {
+    "waste": {
+      "usd_per_month": 1240,
+      "pct_of_spend": 8.7,
+      "top_contributor": "keyword 'free dog food' — $340/mo",
+      "tracking_blocker": false
+    },
+    "demand_captured": {
+      "pct": 42.7,
+      "top_opportunity": "Tukwila Search — ~$2,100/mo headroom at 35% budget-lost IS",
+      "rank_lost_blocker": false
+    },
+    "cpa": {
+      "usd": 19.88,
+      "benchmark_low": 25,
+      "benchmark_high": 65,
+      "break_even": 72,
+      "trend_vs_last": -2.14
+    }
+  },
+  "top_actions": [
+    "Paused 'free dog food' keyword ($120 waste)",
+    "Budget-lost IS 40% on Tukwila Search at $14 CPA"
+  ],
+  "next_milestone": null
+}
+```
+
+On re-audits, diff the three metric lines directly — no abstract bucket movement:
+
+- `Waste: $640/mo (4.1%) _(was $1,240/mo — 3 fixes applied)_`
+- `Demand captured: 58% _(was 42% — Tukwila budget increased)_`
+- `CPA: $18.40 _(was $19.88 — stable)_`
+
+Three numbers, three deltas, zero artificial ratings. If a number didn't move, say "unchanged." If it moved the wrong way, show the delta without sugar-coating.
 
 ---
 

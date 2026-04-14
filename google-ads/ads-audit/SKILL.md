@@ -46,11 +46,13 @@ Match campaign names, ad group names, and keyword themes using case-insensitive 
 ## Reference Documents
 
 **Always read before Phase 2:**
-- `references/account-health-scoring.md` — Diagnostic thresholds, red flags, interpretation matrices, and benchmark tables
+- `references/account-health-scoring.md` — Diagnostic thresholds, red flags, interpretation matrices, pulse metric annotation rules, and the dollar-driven Quick Wins filter
+- `../shared/industry-templates.json` — Industry presets (margin, AOV, target CPA, red flags, quick-start negatives). Cache in memory for the session
+- `../shared/ppc-math.md` — Break-even CPA, headroom, LTV:CAC, IS opportunity, budget forecasting. Read before computing any dollar-denominated finding
 
 **Read during Phase 2.5 / Phase 3:**
 - `references/persona-discovery.md` — Persona template, derivation rules, and JSON schema (read during Phase 2.5)
-- `references/business-context.md` — Website crawl procedure and business-context.json schema (read during Phase 3)
+- `references/business-context.md` — Website crawl procedure, business-context.json schema, and unit economics population rules (read during Phase 3)
 
 **Read on demand** — only load these when the analysis surfaces a relevant issue. Loading all of them upfront wastes ~1,000 lines of context:
 - `../ads/references/quality-score-framework.md` — Read only if avg QS < 6 or high-spend keywords have QS < 5
@@ -156,12 +158,20 @@ If `runGaqlQuery` errors or is unavailable, fall back to per-campaign helper too
 
 **Minimum data for a meaningful audit:** Campaign list, keyword data, impression share, and conversion actions must return data. If the account has zero campaigns or zero spend, skip to Phase 3 (business context).
 
-**Small/new account gate:** If total spend < $500 or total conversions < 10 in the date range, the account doesn't have enough data for meaningful waste rate, demand captured, or CPA metrics. Run a **simplified audit**:
+**Launch mode (small/new account gate):** If total spend < $500 or total conversions < 10 in the date range, the account doesn't have enough data for meaningful waste rate, demand captured, or CPA metrics. Switch to **Launch mode**:
+
 1. Layer 1 (tracking check) — still critical, catch setup problems early
-2. Layer 2 (structure check only) — campaign organization, keyword themes, ad copy completeness
-3. Skip Layers 3-5 — they'd be statistically meaningless. Still compute and persist pulse metrics (with a "low data" caveat) so re-audits have a baseline
-4. Report format: use the same 3-pass template but note "Limited data — metrics will be meaningful after 30+ days with $500+ spend." Focus recommendations on structural setup, not optimization
-5. Still run Phase 2.5 (personas) and Phase 3 (business context) — these are valuable regardless of data volume
+2. Layer 2 (structure check only) — campaign organization, keyword themes, ad copy completeness, industry-template red-flag checks
+3. Skip Layers 3-5 — they'd be statistically meaningless. Still compute and persist pulse metrics (with `"low_data": true`) so re-audits have a baseline
+4. Report format: use the launch-mode template — no pulse metrics (too little data to compute waste or headroom in dollars), no dollar-impact claims. Instead surface a **Readiness checklist** scored `ready | needs fix | blocker` and a **Next milestone** trigger
+5. **Set the next milestone** in `audit-history.json`:
+   ```json
+   "next_milestone": { "conversions": 30, "spend_usd": 1000, "check_after": "2026-05-14" }
+   ```
+   The thresholds are `max(30, industry_template.smart_bidding_min_conv_month)` for conversions, `$1,000` for spend, and 30 days out for the date. Whichever hits first triggers the next full audit.
+6. Still run Phase 2.5 (personas) and Phase 3 (business context) — these are valuable regardless of data volume. Use `industry_template.recommended_conversion_actions` to recommend missing conversion actions.
+
+**Milestone check on subsequent runs:** If `audit-history.json.next_milestone` exists and any threshold has been crossed, graduate to a full audit and clear the milestone. Otherwise repeat launch-mode with a brief "tracking toward milestone" update.
 
 ## Phase 2: Analyze
 
@@ -183,7 +193,7 @@ Report passes (organized by action type):
 
 **Scope-aware analysis:** When the audit is scoped, analyze campaign-level data using only in-scope campaigns. Account-level checks (tracking, settings) run account-wide but note how issues affect the scoped campaigns.
 
-Read `references/account-health-scoring.md` for diagnostic thresholds, red flags, and interpretation matrices. Use it as a reference for severity — the thresholds tell you what's "bad enough to flag" vs. "acceptable."
+Read `references/account-health-scoring.md` for diagnostic thresholds, red flags, and interpretation matrices. The threshold bands tell you what's "bad enough to flag" vs. "acceptable" — use them to decide whether a finding makes it into the report at all.
 
 ---
 
@@ -409,9 +419,33 @@ Write to `{data_dir}/business-context.json` using the schema in `references/busi
 
 ## Phase 4: Deliver the Audit Report
 
-The report uses the **3-pass structure** — organized by what the user should do, not by what dimension was analyzed. Lead with the verdict and pulse metrics, then the three passes, then personas and questions.
+The report uses the **3-pass structure** — organized by what the user should do, not by what dimension was analyzed. Lead with the three pulse metrics (each self-narrating), then the three passes, then Quick Wins, personas, and questions.
 
 **The #1 rule: no duplication.** Each finding appears in exactly one place.
+**The #2 rule: no artificial ratings.** No letter grades. No emoji verdict labels. No severity buckets. Every finding carries its dollar impact and `time_to_fix`; the pulse metrics carry their top contributor and a pass pointer. That's all the prioritization signal the user needs — and it can't invert on dollars.
+
+### Annotating every finding
+
+Each Pass 1/2/3 finding must carry two fields (and only two):
+
+- `dollar_impact_usd`: the monthly dollar value of the waste / opportunity. Use margin-aware framing when `business-context.json.unit_economics.aov_usd` and `profit_margin` are available (see `../shared/ppc-math.md`); fall back to account-average heuristics otherwise. Never mix framings in one report.
+- `time_to_fix`: descriptive only — `<5min` | `<15min` | `<30min` | `<2h` | `>2h`. How long the fix takes, not how important it is.
+
+Findings that can't be dollar-denominated (tracking broken, policy risk, missing consent mode) use `dollar_impact_usd: "blocker"` instead of a number. Blockers always float to the top of their pass and always qualify for Quick Wins regardless of fix time.
+
+Sort findings within each pass by `dollar_impact_usd` descending. Blockers first. No severity label, no priority label — the dollar number IS the priority.
+
+### Annotating the pulse metrics
+
+Each pulse metric line is a self-contained finding. It states the raw number, names the single biggest contributor, and points to the pass that fixes it. Rules in `references/account-health-scoring.md` → "Pulse Metrics — The Only Scoreboard":
+
+1. **Waste** — `$X/mo (Y% of spend) · top: "[keyword/term/campaign]" $Z/mo · → Pass 1`
+   Signal override: if conversion tracking is broken, replace `$X/mo (Y%)` with `⚠️ Cannot compute — conversion tracking broken` and point to the tracking fix.
+2. **Demand captured** — `X% · top opportunity: "[campaign]" ~$Y/mo headroom · → Pass 2`
+   Relevance override: if rank-lost IS > 30% on a campaign, point to Pass 3 and explicitly say "fix relevance first — more budget won't help."
+3. **CPA** — `$X · vs [industry $Y–$Z OR break-even $Y] · [trend or top structural driver] · → Pass 3 or "healthy — no action"`
+
+**On re-audits**, diff each metric line against the previous `audit-history.json` entry and append `_(was $Y/mo — [what changed])_` when the delta is >5%. When the delta is <5%, say `_(unchanged)_`. No bucket-flipping, no emoji verdict swaps — just three numbers moving (or not).
 
 ### Pulse Metrics
 
@@ -436,21 +470,40 @@ After each audit, append a snapshot to `{data_dir}/audit-history.json`:
       "date": "2026-04-11",
       "date_range": "2026-03-12 to 2026-04-11",
       "account_id": "7521406707",
-      "total_spend": 1431.48,
+      "mode": "full",
+      "total_spend": 14320.00,
       "total_conversions": 72,
       "metrics": {
-        "waste_rate": 11.3,
-        "demand_captured": 42.7,
-        "cpa": 19.88
+        "waste": {
+          "usd_per_month": 1240,
+          "pct_of_spend": 8.7,
+          "top_contributor": "keyword 'free dog food' — $340/mo",
+          "tracking_blocker": false
+        },
+        "demand_captured": {
+          "pct": 42.7,
+          "top_opportunity": "Tukwila Search — ~$2,100/mo headroom at 35% budget-lost IS",
+          "rank_lost_blocker": false
+        },
+        "cpa": {
+          "usd": 19.88,
+          "benchmark_low": 25,
+          "benchmark_high": 65,
+          "break_even": 72,
+          "trend_vs_last": -2.14
+        }
       },
       "top_actions": [
         "Paused 'free dog food' keyword ($120 waste)",
         "Budget-lost IS 40% on Tukwila Search at $14 CPA"
-      ]
+      ],
+      "next_milestone": null
     }
   ]
 }
 ```
+
+For launch-mode audits, set `"mode": "launch"`, mark each metric with `"low_data": true`, and populate `next_milestone` with the conversion/spend/date thresholds that graduate the next audit to full mode.
 
 **On first audit:** Create the file. Show raw values with no comparison.
 
@@ -463,29 +516,52 @@ After each audit, append a snapshot to `{data_dir}/audit-history.json`:
 
 ```
 # [Business Name] — Ads Audit
-**[Date range] · $X,XXX spent · XX conversions · $XX CPA**
-Waste: X% · Demand captured: X% · CPA: $X
-[If previous audit exists: show (was Y%) for each metric]
+[Date range] · $X,XXX spent · XX conversions · Last 30 days
 [If scoped] Scoped to: [description]
+[If unit_economics.source == "inferred_from_template"]
+_Profitability estimates use industry defaults — confirm your actual AOV and margin for sharper recommendations._
 
-[2-3 sentence verdict. What's working, what's broken, and the single biggest
-opportunity in dollar terms. This paragraph should be enough for someone who
-won't read further.]
+**Waste: $X/mo (Y% of spend)** — top: "[keyword/term/campaign]" $Z/mo · → Pass 1
+[if re-audit] _(was $A/mo — [what changed])_ or _(unchanged)_
+
+**Demand captured: X%** — top opportunity: "[campaign]" ~$Y/mo headroom · → Pass 2
+[if rank-lost IS > 30% on a campaign: "Rank-lost IS X% on [campaign] — fix relevance first, more budget won't help · → Pass 3"]
+[if re-audit] _(was Y% — [what changed])_ or _(unchanged)_
+
+**CPA: $X** — vs [industry $Y–$Z OR break-even $Y] · [trend or top driver] · → Pass 3 or "healthy — no action"
+[if re-audit] _(was $Y — [what changed])_ or _(unchanged)_
+
+[If conversion tracking is broken, the Waste line is replaced with:]
+**Waste: ⚠️ Cannot compute — conversion tracking broken** · → Pass 1 (fix tracking first)
 
 ## Stop Wasting (Pass 1)
-1. **[Action]** — saves $X/month
-2. **[Action]** — saves $X/month
-3. **[Action]** — saves $X/month
+1. **[Action]** — saves $X/mo · `<15min`
+2. **[Action]** — saves $X/mo · `<30min`
+3. **[Action]** — saves $X/mo · `<2h`
 
 ## Capture More (Pass 2)
-1. **[Action]** — est. +X conversions/month at $Y CPA
-2. **[Action]** — est. +X conversions/month
-3. **[Action]** — est. +X conversions/month
+1. **[Action]** — est. +$X/mo revenue (+Y conv at $Z CPA) · `<30min`
+2. **[Action]** — est. +$X/mo · `<2h`
+3. **[Action]** — est. +$X/mo · `<2h`
 
 ## Fix Fundamentals (Pass 3)
-1. **[Action]** — est. X% CPC reduction on $Y/month spend
-2. **[Action]** — [impact]
-3. **[Action]** — [impact]
+1. **[Action]** — est. $X/mo CPC savings on $Y/mo spend · `>2h`
+2. **[Action]** — [impact in $/mo] · `<2h`
+3. **[Action]** — [impact in $/mo] · `<30min`
+
+Findings are sorted by dollar impact within each pass. Blockers (tracking,
+policy, consent) appear at the top of their pass regardless of dollar value
+because they unblock measurement.
+
+## Quick Wins
+[Auto-generated: findings where dollar_impact_usd >= 200 AND
+time_to_fix IN ('<5min','<15min'), sorted by $ impact desc, max 5.
+Blockers (tracking/policy fixes) are pinned at the top regardless of
+dollar figure. Each item must include the exact /ads command where
+applicable. If none qualify, omit this section entirely — don't fabricate.]
+
+1. [Action] — saves ~$X/mo (`<5min`) · `/ads [command]`
+2. [Action] — saves ~$X/mo (`<15min`) · `/ads [command]`
 
 Run `/ads` to execute any of these.
 
@@ -499,6 +575,38 @@ Run `/ads` to execute any of these.
 
 [Only if business context has gaps that matter for the recommendations.
 Max 2-3 questions. Don't ask what you can infer from the data.]
+```
+
+**Launch-mode report variant** (total spend < $500 OR total conversions < 10):
+
+```
+# [Business Name] — Ads Launch Check
+**Launch mode** · [Date range] · $XXX spent · X conversions
+_Too little data to compute waste or headroom in dollars — come back after the milestone below._
+[If scoped] Scoped to: [description]
+
+[2-3 sentences describing setup quality and readiness — what's configured,
+what's missing, what should happen before the next milestone. No optimization
+claims, no dollar impact, no score.]
+
+## Readiness Checklist
+- ✅ / ⚠️ / 🚫 Conversion tracking — [what's set up or missing]
+- ✅ / ⚠️ / 🚫 Campaign structure — [organization quality]
+- ✅ / ⚠️ / 🚫 Ad copy completeness — [RSA count, asset coverage]
+- ✅ / ⚠️ / 🚫 Targeting — [geo, network, language]
+- ✅ / ⚠️ / 🚫 Industry red flags — [from industry-templates.json]
+
+## Fix Before Next Milestone
+1. [Blocker or needs-fix item] — `/ads` command or manual step
+2. ...
+
+## Next Milestone
+Come back for a full audit when **any** of these hits:
+- 📈 **XX conversions** (currently X)
+- 💵 **$X,000 spent** (currently $XXX)
+- 📅 **[date 30 days out]**
+
+I'll remember the milestone — next `/ads-audit` run will auto-upgrade to a full audit.
 ```
 
 ### What makes a good action item
@@ -528,7 +636,8 @@ After the report, add ONE handoff based on the biggest issue found:
 | 3+ converting search terms not yet keywords | Offer to add them via `/ads` |
 | Waste rate > 15% | Offer to pause/negative via `/ads` |
 | Brand >60% of conversions | Flag brand dependency risk; suggest non-brand strategy |
-| High CTR but low conversion rate | Suggest landing page audit |
+| High CTR but low conversion rate | Suggest `/ads-landing` to score the landing page |
+| Any ad group with CTR > account avg AND CVR < 50% of account avg | Suggest `/ads-landing` for that landing page |
 
 Don't list all possible handoffs — pick the one that matches the #1 action item.
 
