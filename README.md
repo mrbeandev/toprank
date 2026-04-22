@@ -4,9 +4,13 @@
 >
 > <a href="https://www.producthunt.com/products/adsagent-google-ads-claude-connector?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-adsagent-google-ads-claude-connector" target="_blank"><img alt="AdsAgent - Google Ads Claude Connector - Let Claude run your Google Ads — fix, measure, iterate. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1129319&theme=light&t=1776841517852" /></a>
 
-**SEO + Google Ads skills for Claude Code. Data-driven decisions, not dashboards.**
+**The official Google Ads + SEO plugin from [AdsAgent](https://adsagent.org). Data-driven decisions, not dashboards.**
 
 Toprank gives your AI agent direct access to Google Search Console and Google Ads. It analyzes your traffic, surfaces what's hurting your rankings, finds wasted ad spend, and tells you exactly what to fix. When you have access to the repo, it goes further: rewriting meta tags, fixing headings, adding structured data, and shipping the changes.
+
+### Why AdsAgent?
+
+Toprank is the CLI side of AdsAgent — the skills that run inside Claude Code. [adsagent.org](https://adsagent.org) is the companion web app: sign up there to get your free API key, connect your Google Ads accounts in a couple of clicks, and run audits through a browser UI. Both sides share the same engine, so an audit you run from the CLI uses the same tooling as the one on the web.
 
 > *"Am I wasting money on ads right now?"*
 > *"Why did my traffic drop and how do I fix it?"*
