@@ -219,7 +219,7 @@ toprank/
 
 The Google Ads surface is also available as a standalone remote MCP server — use it from any MCP client (Claude Desktop, Cursor, Inspector, your own agent) without installing the Toprank CLI plugin.
 
-- **Registry:** [`io.github.nowork-studio/adsagent`](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.nowork-studio/adsagent)
+- **Registry name:** `io.github.nowork-studio/adsagent` (verify: `curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=adsagent"`)
 - **Endpoint:** `https://adsagent.org/api/mcp` (streamable HTTP)
 - **Auth:** OAuth (Claude Connector) or Bearer token — get one at [adsagent.org/connect](https://adsagent.org/connect)
 
